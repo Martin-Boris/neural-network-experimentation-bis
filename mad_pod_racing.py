@@ -45,9 +45,9 @@ ENV_WIDTH = 16000
 ENV_HEIGHT = 9000
 MAX_SPEED = 15000
 TIME_OUT = 100
-CP_REWARD = 20
-END_REWARD = 100
-TRAVEL_REWARD = 0
+CP_REWARD = 5
+END_REWARD = 20
+TRAVEL_REWARD = -0.01
 OUT_SCREEN_REWARD = 0  # -100
 
 
@@ -177,11 +177,12 @@ class MapPodRacing(gym.Env):
                 reward = CP_REWARD
                 self.cp_done += 1
         else:
-            reward += TRAVEL_REWARD
+
             if not self.my_pod.is_moving_forward(self.cp_queue[0][0],self.cp_queue[0][1]):
-                reward = -1
+                reward += -1
             self.timeout -= 1
             if self.timeout <= 0:
+                reward += -1
                 terminated = True
         self.trajectory_reward += reward
         obs = self.get_obs()

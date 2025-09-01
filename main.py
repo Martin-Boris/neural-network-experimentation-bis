@@ -13,6 +13,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
+from helper import prevent_sleep, allow_sleep
 from mad_pod_racing import MapPodRacing, supervised_action_choose, supervised_action_choose_from_angle
 
 #env = gym.make("CartPole-v1")
@@ -36,6 +37,8 @@ device = torch.device(
     "mps" if torch.backends.mps.is_available() else
     "cpu"
 )
+
+prevent_sleep()
 
 
 # To ensure reproducibility during training, you can fix the random seeds
@@ -89,16 +92,17 @@ class DQN(nn.Module):
 
     def __init__(self, n_observations, n_actions):
         super(DQN, self).__init__()
-        self.layer1 = nn.Linear(n_observations, 128)
-        self.layer2 = nn.Linear(128, 128)
-        self.layer3 = nn.Linear(128, n_actions)
+        self.actor = nn.Sequential(
+            nn.Linear(n_observations, 256),
+            nn.ReLU(),
+            nn.Linear(256, 256),
+            nn.ReLU(),
+            nn.Linear(256, n_actions))
 
     # Called with either one element to determine next action, or a batch
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
     def forward(self, x):
-        x = self.layer1(x)
-        x = self.layer2(x)
-        return self.layer3(x)
+        return self.actor(x)
 
 # BATCH_SIZE is the number of transitions sampled from the replay buffer
 # GAMMA is the discount factor as mentioned in the previous section
@@ -128,7 +132,7 @@ target_net = DQN(n_observations, n_actions).to(device)
 target_net.load_state_dict(policy_net.state_dict())
 
 optimizer = optim.AdamW(policy_net.parameters(), lr=LR, amsgrad=True)
-memory = ReplayMemory(10000)
+memory = ReplayMemory(40000)
 
 
 steps_done = 0
@@ -291,3 +295,5 @@ with torch.no_grad():
         frames.append(env.render())
         observation = torch.tensor(observation_, dtype=torch.float32, device=device).unsqueeze(0)
 imageio.mimsave("mad_pod_episode.gif", frames, fps=10)
+
+allow_sleep()
