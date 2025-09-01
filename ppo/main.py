@@ -26,8 +26,9 @@ if __name__ == '__main__':
     for i in range(n_games):
         observation, _ = env.reset()
         done = False
+        truncated = False
         score = 0
-        while not done:
+        while not done and not truncated:
             action, prob, val = agent.choose_action(observation)
             observation_, reward, done, truncated, info = env.step(action)
             n_steps += 1
