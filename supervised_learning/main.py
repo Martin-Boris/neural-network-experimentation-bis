@@ -97,6 +97,7 @@ if __name__ == "__main__":
     env = gym.make(args.env_id)
     agent = Agent(env).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
+    loss_fn = nn.MSELoss()
 
     n_steps = 0
     for i in range(args.total_games):
@@ -106,9 +107,8 @@ if __name__ == "__main__":
         score = 0
         completion_cp = 0
         while not done and not truncated:
-            action, prob, val = agent.get_action_and_value(observation)
+            action = agent.get_action_and_value(observation)
             observation_, reward, done, truncated, info = env.step(action)
             n_steps += 1
             score += reward
-            agent.remember(observation, action, prob, val, reward, done)
             observation = observation_
