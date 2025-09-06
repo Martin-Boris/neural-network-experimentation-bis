@@ -63,7 +63,14 @@ class MapPodRacing(gym.Env):
         self.map = None
         self.seed = None
         self.cp_done = 0
-        self.action_space = gym.spaces.Discrete(12)
+        low_action = np.array([
+            -2*np.pi,  # angle (in radians)
+        ], dtype=np.float32)
+        high_action = np.array([
+            2*np.pi,  # angle (in radians)
+        ], dtype=np.float32)
+        self.action_space = gym.spaces.Box(low=low_action, high=high_action, dtype=np.float32)
+        #self.action_space = gym.spaces.Discrete(12)
         self.previous_action_idx = None
         '''self.angle_map = np.array([
             0,  # 0°
@@ -109,8 +116,6 @@ class MapPodRacing(gym.Env):
 
         low = np.array([
             0,  # angle (in radians)
-            0.0,  # distance (>= 0)
-            -MAX_SPEED, -MAX_SPEED,  # speed x, y
         ], dtype=np.float32)
 
         '''high = np.array([
@@ -123,8 +128,6 @@ class MapPodRacing(gym.Env):
 
         high = np.array([
             np.pi * 2,  # angle
-            ENV_WIDTH * 2,  # distance
-            MAX_SPEED, MAX_SPEED,  # speed x, y
         ], dtype=np.float32)
 
         self.observation_space = spaces.Box(low=low, high=high, dtype=np.float32)
@@ -164,16 +167,14 @@ class MapPodRacing(gym.Env):
         angle = from_vector(self.my_pod.position, Vector(cp_x, cp_y)).angle()
 
         return np.array([
-            to_positive_radians(angle),
-            distance / MAX_DISTANCE,
-            self.my_pod.speed.x, self.my_pod.speed.y
+            angle,
         ], dtype=np.float32)
 
     def step(self, action):
         # apply action on my pod
         self.previous_action_idx = action
-        angle = self.angle_map[action]
-        self.my_pod.update_acceleration_from_angle(angle, 100)
+        #angle = self.angle_map[action]
+        self.my_pod.update_acceleration_from_angle(action, 100)
         self.my_pod.apply_force(self.my_pod.acceleration)
         self.my_pod.step()
         self.my_pod.apply_friction()
@@ -188,6 +189,7 @@ class MapPodRacing(gym.Env):
             self.cp_queue.popleft()
             self.timeout = TIME_OUT
             if len(self.cp_queue) == 0:
+                reward = CP_REWARD
                 terminated = True
             else:
                 reward = CP_REWARD
@@ -200,7 +202,7 @@ class MapPodRacing(gym.Env):
         self.trajectory_reward += reward
         obs = self.get_obs()
         info = {"cp_completion": 1 - (len(self.cp_queue) / (len(self.map.check_points) * 3))}
-        return obs, reward, terminated, truncated, {}
+        return obs, reward, terminated, truncated, info
 
     def render(self):
         canvas = pygame.Surface((self.image_width, self.image_heigh))
@@ -239,7 +241,7 @@ class MapPodRacing(gym.Env):
 
 
 def supervised_action_choose(observation):
-    target_angle = observation[1]  # angle to cp (in radians)
+    target_angle = observation[0]  # angle to cp (in radians)
     angles = np.array([
         0,  # 0°
         np.pi / 6,  # 30°
@@ -257,8 +259,8 @@ def supervised_action_choose(observation):
     # Normalize angular differences to [-π, π]
     angle_diffs = np.abs((angles - target_angle + np.pi) % (2 * np.pi) - np.pi)
 
-    action = np.argmin(angle_diffs)
-    return action
+    action_idx = np.argmin(angle_diffs)
+    return angles[action_idx]
 
 
 def supervised_action_choose_from_angle(target_angle):
@@ -278,6 +280,9 @@ def supervised_action_choose_from_angle(target_angle):
     ])
     # Normalize angular differences to [-π, π]
     angle_diffs = np.abs((angles - target_angle + np.pi) % (2 * np.pi) - np.pi)
+    sigma = 0.5  # smaller sigma = sharper peak around target
+    gaussian_weights = np.exp(-angle_diffs ** 2 / (2 * sigma ** 2))
+    probabilities = gaussian_weights / np.sum(gaussian_weights)
 
     action = np.argmin(angle_diffs)
     return action

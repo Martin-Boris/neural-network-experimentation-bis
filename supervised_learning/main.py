@@ -8,11 +8,11 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import tyro
-from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
 import wandb
 
-from supervised_learning.mad_pod_racing import MapPodRacing
+from supervised_learning.mad_pod_racing import MapPodRacing, supervised_action_choose_from_angle, \
+    supervised_action_choose
 
 
 @dataclass
@@ -23,13 +23,16 @@ class Args:
     """seed of the experiment"""
     cuda: bool = True
     """if toggled, cuda will be enabled by default"""
+    wandb_project_name: str = "cleanRL"
+    """the wandb's project name"""
+    wandb_entity: str = None
 
     # Algorithm specific arguments
     env_id: str = "gymnasium_env/MapPodRacing-v0"  # "CartPole-v1"
     """the id of the environment"""
-    total_games: int = 1000
+    total_games: int = 4000
     """total timesteps of the experiments"""
-    learning_rate: float = 2.5e-3
+    learning_rate: float = 2.5
     """the learning rate of the optimizer"""
     num_steps: int = 512
     """the number of steps to run in each environment per policy rollout"""
@@ -42,32 +45,28 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class Agent(nn.Module):
-    def __init__(self, env):
+    def __init__(self, input_dim = 3,output_dim=1,chkpt_dir='tmp/'):
         super().__init__()
-        self.critic = nn.Sequential(
-            layer_init(nn.Linear(np.array(env.action_space.shape).prod(), 128)),
-            nn.Tanh(),
-            layer_init(nn.Linear(128, 128)),
-            nn.Tanh(),
-            layer_init(nn.Linear(128, 1), std=1.0),
-        )
         self.actor = nn.Sequential(
-            layer_init(nn.Linear(np.array(env.observation_space.shape).prod(), 128)),
-            nn.Tanh(),
+            layer_init(nn.Linear(np.array(input_dim).prod(), 128)),
+            nn.ReLU(),
             layer_init(nn.Linear(128, 128)),
-            nn.Tanh(),
-            layer_init(nn.Linear(128, env.single_action_space.n), std=0.01),
+            nn.ReLU(),
+            layer_init(nn.Linear(128, 128)),
+            nn.ReLU(),
+            layer_init(nn.Linear(128, output_dim), std=0.01),
         )
+        self.checkpoint_file = os.path.join(chkpt_dir, 'actor_torch')
 
     def get_value(self, x):
         return self.critic(x)
 
     def get_action_and_value(self, x, action=None):
-        logits = self.actor(x)
-        probs = Categorical(logits=logits)
-        if action is None:
-            action = probs.sample()
+        action = self.actor(x)
         return action
+
+    def save_checkpoint(self):
+        torch.save(self.state_dict(), self.checkpoint_file)
 
 
 if __name__ == "__main__":
@@ -77,15 +76,7 @@ if __name__ == "__main__":
     )
     args = tyro.cli(Args)
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
-    wandb.init(
-        project=args.wandb_project_name,
-        entity=args.wandb_entity,
-        sync_tensorboard=True,
-        config=vars(args),
-        name=run_name,
-        monitor_gym=True,
-        save_code=True,
-    )
+
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
         "hyperparameters",
@@ -95,20 +86,36 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     env = gym.make(args.env_id)
-    agent = Agent(env).to(device)
+    agent = Agent(input_dim=env.observation_space.shape[0], output_dim=env.action_space.shape[0]).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
     loss_fn = nn.MSELoss()
 
-    n_steps = 0
+    cp_completions = []
+
     for i in range(args.total_games):
         observation, _ = env.reset()
         done = False
         truncated = False
         score = 0
         completion_cp = 0
+        n_steps = 0
+        cp_completion = 0
         while not done and not truncated:
-            action = agent.get_action_and_value(observation)
+            action = agent.get_action_and_value(torch.from_numpy(observation).to(device=device))
             observation_, reward, done, truncated, info = env.step(action)
             n_steps += 1
+            cp_completion = info["cp_completion"]
             score += reward
             observation = observation_
+            loss = loss_fn(action,torch.tensor([supervised_action_choose(observation)],dtype=torch.float32))
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        cp_completions.append(cp_completion)
+        print("episode : ",i," score : ",score, " round : ", n_steps, " cp_completion : ", cp_completion)
+        writer.add_scalar("charts/episodic_return", score, i)
+        writer.add_scalar("charts/episodic_length", n_steps, i)
+        writer.add_scalar("charts/cp_completion", cp_completion, i)
+
+    agent.save_checkpoint()

@@ -63,6 +63,7 @@ class MapPodRacing(gym.Env):
         self.map = None
         self.seed = None
         self.cp_done = 0
+
         self.action_space = gym.spaces.Discrete(12)
         self.previous_action_idx = None
         '''self.angle_map = np.array([
