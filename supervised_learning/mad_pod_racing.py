@@ -44,6 +44,11 @@ end :
 """
 ENV_WIDTH = 16000
 ENV_HEIGHT = 9000
+OVERFLOW_BOUDARIES = 4000
+MAX_X = ENV_WIDTH + OVERFLOW_BOUDARIES
+MAX_Y = ENV_HEIGHT + OVERFLOW_BOUDARIES
+MIN_X = -OVERFLOW_BOUDARIES
+MIN_Y = -OVERFLOW_BOUDARIES
 MAX_DISTANCE = 20000
 MAX_SPEED = 15000
 TIME_OUT = 100
@@ -64,7 +69,7 @@ class MapPodRacing(gym.Env):
         self.seed = None
         self.cp_done = 0
         low_action = np.array([
-            -2*np.pi,  # angle (in radians)
+            0,  # angle (in radians)
         ], dtype=np.float32)
         high_action = np.array([
             2*np.pi,  # angle (in radians)
@@ -115,7 +120,9 @@ class MapPodRacing(gym.Env):
         ], dtype=np.float32)'''
 
         low = np.array([
-            0,  # angle (in radians)
+            -np.pi * 2,  # angle (in radians)
+            MIN_X, MIN_Y,  # position x, y
+            0, 0,  # checkpoint x, y
         ], dtype=np.float32)
 
         '''high = np.array([
@@ -128,6 +135,8 @@ class MapPodRacing(gym.Env):
 
         high = np.array([
             np.pi * 2,  # angle
+            MAX_X, MAX_Y,  # position x, y
+            MAX_X, MAX_Y,  # checkpoint x, y
         ], dtype=np.float32)
 
         self.observation_space = spaces.Box(low=low, high=high, dtype=np.float32)
@@ -165,9 +174,12 @@ class MapPodRacing(gym.Env):
         else:
             distance = 1
         angle = from_vector(self.my_pod.position, Vector(cp_x, cp_y)).angle()
-
+        norm_pos_x,norm_pos_y=normalize_coord(self.my_pod.position.x,self.my_pod.position.y)
+        cp_x,cp_y=normalize_coord(cp_x,cp_y)
         return np.array([
-            angle,
+            to_positive_radians(angle),
+            norm_pos_x,norm_pos_y,
+            cp_x, cp_y,
         ], dtype=np.float32)
 
     def step(self, action):
@@ -238,7 +250,15 @@ class MapPodRacing(gym.Env):
         if self.window is not None:
             pygame.display.quit()
             pygame.quit()"""
+def normalize_coord(x,y):
+    x_norm = (x- MIN_X)/(MAX_X - MIN_X)
+    y_norm = (y - MIN_Y)/(MAX_Y - MIN_Y)
+    return x_norm,y_norm
 
+def denormalize_coord(x_norm,y_norm):
+    x = x_norm * (MAX_X - MIN_X) + MIN_X
+    y = y_norm*(MAX_Y - MIN_Y) + MIN_Y
+    return x,y
 
 def supervised_action_choose(observation):
     target_angle = observation[0]  # angle to cp (in radians)

@@ -3,6 +3,7 @@ import random
 import time
 from dataclasses import dataclass
 import gymnasium as gym
+import imageio
 import numpy as np
 import torch
 import torch.nn as nn
@@ -30,12 +31,12 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "gymnasium_env/MapPodRacing-v0"  # "CartPole-v1"
     """the id of the environment"""
-    total_games: int = 4000
+    total_games: int = 3000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5
     """the learning rate of the optimizer"""
-    num_steps: int = 512
-    """the number of steps to run in each environment per policy rollout"""
+    hidden_size: int = 128
+    """the size of the hidden layer"""
 
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
@@ -56,7 +57,7 @@ class Agent(nn.Module):
             nn.ReLU(),
             layer_init(nn.Linear(128, output_dim), std=0.01),
         )
-        self.checkpoint_file = os.path.join(chkpt_dir, 'actor_torch')
+
 
     def get_value(self, x):
         return self.critic(x)
@@ -65,9 +66,13 @@ class Agent(nn.Module):
         action = self.actor(x)
         return action
 
-    def save_checkpoint(self):
-        torch.save(self.state_dict(), self.checkpoint_file)
+    def save_checkpoint(self, filename):
+        checkpoint_file = os.path.join('tmp/', filename)
+        torch.save(self.state_dict(), checkpoint_file)
 
+    def load_checkpoint(self,filename):
+        checkpoint_file = os.path.join('tmp/', filename)
+        self.load_state_dict(torch.load(checkpoint_file,weights_only=True))
 
 if __name__ == "__main__":
     gym.register(
@@ -87,7 +92,8 @@ if __name__ == "__main__":
 
     env = gym.make(args.env_id)
     agent = Agent(input_dim=env.observation_space.shape[0], output_dim=env.action_space.shape[0]).to(device)
-    optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
+    #agent.load_checkpoint('experimentation_model.pth')
+    optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate)
     loss_fn = nn.MSELoss()
 
     cp_completions = []
@@ -102,7 +108,7 @@ if __name__ == "__main__":
         cp_completion = 0
         while not done and not truncated:
             action = agent.get_action_and_value(torch.from_numpy(observation).to(device=device))
-            observation_, reward, done, truncated, info = env.step(action)
+            observation_, reward, done, truncated, info = env.step(action.detach())
             n_steps += 1
             cp_completion = info["cp_completion"]
             score += reward
@@ -118,4 +124,20 @@ if __name__ == "__main__":
         writer.add_scalar("charts/episodic_length", n_steps, i)
         writer.add_scalar("charts/cp_completion", cp_completion, i)
 
-    agent.save_checkpoint()
+    agent.save_checkpoint('model_first_learning.pth')
+    score = 0
+    done = False
+    truncated = False
+    observation, info = env.reset()
+    print(observation)
+    frames = [env.render()]
+
+    while not done and not truncated:
+        action = agent.get_action_and_value(torch.from_numpy(observation).to(device=device))
+
+        observation_, reward, done, truncated, info = env.step(action.detach())
+        score += reward
+        frames.append(env.render())
+        observation = observation_
+    print("score ", str(score))
+    imageio.mimsave("mad_pod_episode.gif", frames, fps=10)
