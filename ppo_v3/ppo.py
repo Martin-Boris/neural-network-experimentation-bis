@@ -45,7 +45,7 @@ class Args:
     num_envs: int = 4
     """the number of parallel game environments"""
     num_steps: int = 512
-    """the number of steps to run in each environment per policy rollout"""
+    """the number of steps to runs in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
     gamma: float = 0.99

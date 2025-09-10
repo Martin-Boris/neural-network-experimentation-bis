@@ -316,7 +316,7 @@ def main(config):
 
         run_training(env, config, device)
 
-        # save config file for each run in log directory
+        # save config file for each runs in log directory
         Config.save_config(config, os.path.join(config.log_dir, 'config.yaml'))
 
     elif config.mode == 'test':
