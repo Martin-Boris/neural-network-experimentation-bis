@@ -49,7 +49,7 @@ MAX_X = ENV_WIDTH + OVERFLOW_BOUDARIES
 MAX_Y = ENV_HEIGHT + OVERFLOW_BOUDARIES
 MIN_X = -OVERFLOW_BOUDARIES
 MIN_Y = -OVERFLOW_BOUDARIES
-MAX_DISTANCE = 20000
+MAX_DISTANCE = 5000
 MAX_SPEED = 15000
 TIME_OUT = 100
 CP_REWARD = 5
@@ -123,7 +123,10 @@ class MapPodRacing(gym.Env):
             0,  # angle (in radians)
             MIN_X, MIN_Y,  # position x, y
             0, 0,  # checkpoint x, y
-            0,
+            0,  # last angle
+            0,  # speed angle
+            # 0,  # speed power
+            0  # distance
         ], dtype=np.float32)
 
         '''high = np.array([
@@ -138,7 +141,10 @@ class MapPodRacing(gym.Env):
             np.pi * 2,  # angle
             MAX_X, MAX_Y,  # position x, y
             MAX_X, MAX_Y,  # checkpoint x, y
-            np.pi * 2,
+            np.pi * 2,  # last angle
+            np.pi * 2,  # speed angle
+            # 1,  # speed power
+            1  # distance
         ], dtype=np.float32)
 
         self.observation_space = spaces.Box(low=low, high=high, dtype=np.float32)
@@ -178,16 +184,19 @@ class MapPodRacing(gym.Env):
         angle = from_vector(self.my_pod.position, Vector(cp_x, cp_y)).angle()
         norm_pos_x, norm_pos_y = normalize_coord(self.my_pod.position.x, self.my_pod.position.y)
         cp_x, cp_y = normalize_coord(cp_x, cp_y)
+        speed_vector = from_vector(self.my_pod.position, self.my_pod.position.add(self.my_pod.speed))
         return np.array([
             to_positive_radians(angle),
             norm_pos_x, norm_pos_y,
             cp_x, cp_y,
-            self.previous_action
+            self.previous_action,
+            to_positive_radians(speed_vector.angle()),
+            # max(0.0, min(speed_vector.length() / 600, 1.0)),
+            max(0.0, min(distance / MAX_DISTANCE, 1.0))
         ], dtype=np.float32)
 
     def step(self, action):
         # apply action on my pod
-
         self.previous_action = action[0]
         # angle = self.angle_map[action]
         self.my_pod.update_acceleration_from_angle(action, 100)
@@ -404,7 +413,7 @@ class Pod:
         self.position = Vector(x, y)
         self.last_position = Vector(x, y)
         self.speed = Vector(0, 0)
-        self.last_angle = None
+        self.last_angle = 0
         self.acceleration = Vector(0, 0)
         self.speed = Vector(0, 0)
 
