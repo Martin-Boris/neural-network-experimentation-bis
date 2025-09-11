@@ -15,7 +15,7 @@ frames = [env.render()]
 while not done:
     print(observation)
     action = supervised_action_choose(observation)
-    observation_, reward, done, truncated, info = env.step(np.array([action]))
+    observation_, reward, done, truncated, info = env.step(np.array([action, 0]))
     score += reward
     frames.append(env.render())
     observation = observation_

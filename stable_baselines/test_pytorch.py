@@ -58,7 +58,9 @@ def copy_weights_continuous(sb3_policy, vanilla_model):
 
 # Load the model
 # model = PPO.load("./runs/PPO_6/model")
-model = PPO.load("./runs/PPO_17/model")
+# model = PPO.load("./runs/PPO_17/model")
+# model = PPO.load("./runs/PPO_19/model")
+model = PPO.load("./runs/PPO_20/model")
 
 # Get SB3 policy
 sb3_policy = model.policy
@@ -84,6 +86,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 while not done:
     mean, std, value = model.forward(torch.from_numpy(observation).to(device=device))
+    print(mean.detach().numpy())
     observation_, reward, done, truncated, info = env.step(mean.detach().numpy())
     score += reward
     frames.append(env.render())

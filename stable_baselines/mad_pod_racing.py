@@ -70,9 +70,11 @@ class MapPodRacing(gym.Env):
         self.cp_done = 0
         low_action = np.array([
             0,  # angle (in radians)
+            0,  # power
         ], dtype=np.float32)
         high_action = np.array([
             2 * np.pi,  # angle (in radians)
+            1  # power
         ], dtype=np.float32)
         self.action_space = gym.spaces.Box(low=low_action, high=high_action, dtype=np.float32)
         # self.action_space = gym.spaces.Discrete(12)
@@ -196,10 +198,11 @@ class MapPodRacing(gym.Env):
         ], dtype=np.float32)
 
     def step(self, action):
+        assert self.action_space.contains(action), f"Invalid action: {action}"
         # apply action on my pod
         self.previous_action = action[0]
         # angle = self.angle_map[action]
-        self.my_pod.update_acceleration_from_angle(action, 100)
+        self.my_pod.update_acceleration_from_angle(action[0], int((1 - max(0, min(action[1], 1))) * 100))
         self.my_pod.apply_force(self.my_pod.acceleration)
         self.my_pod.step()
         self.my_pod.apply_friction()
