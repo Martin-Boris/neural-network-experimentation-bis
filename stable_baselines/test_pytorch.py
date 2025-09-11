@@ -11,17 +11,17 @@ class VanillaContinuousPolicyNetwork(nn.Module):
     def __init__(self, obs_dim, action_dim):
         super().__init__()
         # Shared layers
-        self.fc1 = nn.Linear(obs_dim, 64)
-        self.fc2 = nn.Linear(64, 64)
+        self.fc1 = nn.Linear(obs_dim, 128)
+        self.fc2 = nn.Linear(128, 128)
 
         # Actor head: outputs mean of Gaussian
-        self.mean_head = nn.Linear(64, action_dim)
+        self.mean_head = nn.Linear(128, action_dim)
 
         # Learnable log_std (same shape as action_dim)
         self.log_std = nn.Parameter(torch.zeros(action_dim))
 
         # Critic head
-        self.value_head = nn.Linear(64, 1)
+        self.value_head = nn.Linear(128, 1)
 
     def forward(self, x):
         x = torch.tanh(self.fc1(x))
@@ -57,7 +57,8 @@ def copy_weights_continuous(sb3_policy, vanilla_model):
 
 
 # Load the model
-model = PPO.load("./runs/PPO_6/model")
+# model = PPO.load("./runs/PPO_6/model")
+model = PPO.load("./runs/PPO_17/model")
 
 # Get SB3 policy
 sb3_policy = model.policy

@@ -125,7 +125,7 @@ class MapPodRacing(gym.Env):
             0, 0,  # checkpoint x, y
             0,  # last angle
             0,  # speed angle
-            # 0,  # speed power
+            0,  # speed power
             0  # distance
         ], dtype=np.float32)
 
@@ -143,7 +143,7 @@ class MapPodRacing(gym.Env):
             MAX_X, MAX_Y,  # checkpoint x, y
             np.pi * 2,  # last angle
             np.pi * 2,  # speed angle
-            # 1,  # speed power
+            1,  # speed power
             1  # distance
         ], dtype=np.float32)
 
@@ -191,7 +191,7 @@ class MapPodRacing(gym.Env):
             cp_x, cp_y,
             self.previous_action,
             to_positive_radians(speed_vector.angle()),
-            # max(0.0, min(speed_vector.length() / 600, 1.0)),
+            max(0.0, min(speed_vector.length() / 800, 1.0)),
             max(0.0, min(distance / MAX_DISTANCE, 1.0))
         ], dtype=np.float32)
 
