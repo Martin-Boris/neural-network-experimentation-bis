@@ -112,14 +112,7 @@ class MapPodRacing(gym.Env):
             dtype=np.float32
         )"""
 
-        # Observation space (Box of 8 values)
-        '''low = np.array([
-            -2000, -2000,  # position x, y
-            0, 0,  # checkpoint x, y
-            0.0,  # distance (>= 0)
-            -np.pi * 2,  # angle (in radians)
-            -MAX_SPEED, -MAX_SPEED  # speed x, y
-        ], dtype=np.float32)'''
+        # Observation space (Box of 9 values)
 
         low = np.array([
             0,  # angle (in radians)
@@ -130,15 +123,6 @@ class MapPodRacing(gym.Env):
             0,  # speed power
             0  # distance
         ], dtype=np.float32)
-
-        '''high = np.array([
-            ENV_WIDTH + 2000, ENV_HEIGHT + 2000,  # position x, y
-            ENV_WIDTH, ENV_HEIGHT,  # checkpoint x, y
-            ENV_WIDTH * 2,  # distance
-            np.pi * 2,  # angle
-            MAX_SPEED, MAX_SPEED  # speed x, y
-        ], dtype=np.float32)'''
-
         high = np.array([
             np.pi * 2,  # angle
             MAX_X, MAX_Y,  # position x, y
@@ -148,7 +132,6 @@ class MapPodRacing(gym.Env):
             1,  # speed power
             1  # distance
         ], dtype=np.float32)
-
         self.observation_space = spaces.Box(low=low, high=high, dtype=np.float32)
 
         # render
@@ -158,8 +141,12 @@ class MapPodRacing(gym.Env):
 
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
-        self.seed = uuid.uuid4().int & ((1 << 64) - 1)
-        random.seed(self.seed)
+        if seed is None:
+            self.seed = uuid.uuid4().int & ((1 << 64) - 1)
+            random.seed(self.seed)
+        else:
+            self.seed = seed
+            random.seed(seed)
 
         self.map = Map(self.seed)
         self.trajectory_reward = 0
@@ -198,7 +185,7 @@ class MapPodRacing(gym.Env):
         ], dtype=np.float32)
 
     def step(self, action):
-        assert self.action_space.contains(action), f"Invalid action: {action}"
+        # assert self.action_space.contains(action), f"Invalid action: {action}"
         # apply action on my pod
         self.previous_action = action[0]
         # angle = self.angle_map[action]

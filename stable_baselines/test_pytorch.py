@@ -60,7 +60,7 @@ def copy_weights_continuous(sb3_policy, vanilla_model):
 # model = PPO.load("./runs/PPO_6/model")
 # model = PPO.load("./runs/PPO_17/model")
 # model = PPO.load("./runs/PPO_19/model")
-model = PPO.load("./runs/PPO_20/model")
+model = PPO.load("./runs/PPO_22/model")
 
 # Get SB3 policy
 sb3_policy = model.policy
@@ -79,7 +79,7 @@ env = MapPodRacing()
 score = 0
 done = False
 truncated = False
-observation, info = env.reset()
+observation, info = env.reset(seed=1)
 frames = [env.render()]
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
