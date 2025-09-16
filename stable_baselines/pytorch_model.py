@@ -34,7 +34,7 @@ class DiagGaussianDistribution:
 
 class PPOPolicyVanilla(nn.Module):
     def __init__(self, input_dim=9, output_dim=2, low=torch.tensor([0.0, 0.0], dtype=torch.float32),
-                 high=torch.tensor([2 * np.pi, 1.0], dtype=torch.float32)):
+                 high=torch.tensor([2 * np.pi, 10.0], dtype=torch.float32)):
         super().__init__()
         self.low = low
         self.high = high
@@ -125,10 +125,12 @@ class PPOPolicyVanilla(nn.Module):
 
 ### MODEL WEIGHT LOAD
 
-sb3_model = PPO.load("./runs/PPO_22/model")
+# sb3_model = PPO.load("./runs/PPO_23/model")
+sb3_model = PPO.load("./runs/PPO_26/model")
 print(sb3_model.policy)
 
 obs_dim = sb3_model.policy.observation_space.shape[0]
+print(obs_dim)
 action_dim = sb3_model.policy.action_space.shape[0]
 
 nn_model = PPOPolicyVanilla(obs_dim, action_dim)
@@ -140,7 +142,7 @@ env = MapPodRacing()
 score = 0
 done = False
 truncated = False
-observation, info = env.reset(seed=1)
+observation, info = env.reset()
 frames = [env.render()]
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

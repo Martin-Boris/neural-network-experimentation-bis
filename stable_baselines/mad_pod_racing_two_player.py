@@ -10,38 +10,6 @@ import math
 
 from gymnasium import spaces
 
-"""
-Case sigmoid action space 9 discrete :
-    - -1 for nothing
-    - 0 rad for angle 0 or 360° or 2PI for angle 360
-    - 45° or PI/4 for angle 45
-    - 90° or PI/2 for angle 90
-    - 135° or 3PI/4 for angle 135
-    - 180° or PI for angle 180
-    - 225° or 5PI/4 for angle 225
-    - 270° or 3PI/2 for angle 270
-    - 315° or 7PI/3 for angle 315
-
-Case Relu :
-    - 1 Box between 0 and 2PI
-
-
-observation space : 
-   - position (x,y)
-   - next checkpoint position (x,y)
-   - next checkpoint distance (one value d)
-   - next checkpoint angle (one value in rad)
-   - speed (vector x,y)
-
-rewards:
-    - -1 per turn without checkpoint
-    - +20 when end
-    - +5 when checkpoint
-
-end :
-    - lap over : i.e all checkpoint validated in right order 3 times
-    - 100 round without reaching a checkpoint
-"""
 ENV_WIDTH = 16000
 ENV_HEIGHT = 9000
 OVERFLOW_BOUDARIES = 4000
@@ -62,13 +30,18 @@ class MapPodRacing(gym.Env):
 
     def __init__(self):
         self.cp_queue = None
+        self.opponent_cp_queue = None
         self.timeout = None
+        self.opp_timeout = None
         self.my_pod = None
+        self.opponent_pod = None
         self.trajectory_reward = None
         self.map = None
         self.seed = None
         self.cp_done = 0
         self.speed_up = True
+        self.previous_action = 0
+        self.opp_previous_action = 0
         low_action = np.array([
             0,  # angle (in radians)
             0,  # power
@@ -78,40 +51,6 @@ class MapPodRacing(gym.Env):
             10,  # power
         ], dtype=np.float32)
         self.action_space = gym.spaces.Box(low=low_action, high=high_action, dtype=np.float32)
-        # self.action_space = gym.spaces.Discrete(12)
-        self.previous_action = 0
-        '''self.angle_map = np.array([
-            0,  # 0°
-            np.pi / 4,  # 45°
-            np.pi / 2,  # 90°
-            3 * np.pi / 4,  # 135°
-            np.pi,  # 180°
-            5 * np.pi / 4,  # 225°
-            3 * np.pi / 2,  # 270°
-            7 * np.pi / 4  # 315°
-        ])'''
-
-        self.angle_map = np.array([
-            0,  # 0°
-            np.pi / 6,  # 30°
-            np.pi / 3,  # 60°
-            np.pi / 2,  # 90°
-            2 * np.pi / 3,  # 120°
-            5 * np.pi / 6,  # 150°
-            np.pi,  # 180°
-            7 * np.pi / 6,  # 210°
-            4 * np.pi / 3,  # 240°
-            3 * np.pi / 2,  # 270°
-            5 * np.pi / 3,  # 300°
-            11 * np.pi / 6  # 330°
-        ])
-
-        """self.action_space = spaces.Box(
-            low=0.0,
-            high=2 * np.pi,
-            shape=(1,),
-            dtype=np.float32
-        )"""
 
         # Observation space (Box of 9 values)
 
@@ -151,21 +90,29 @@ class MapPodRacing(gym.Env):
 
         self.map = Map(self.seed)
         self.trajectory_reward = 0
-        # Player information
-        self.my_pod = random.choice(self.map.pods)
+        random.shuffle(self.map.pods)
+        self.my_pod, self.opponent_pod = self.map.pods
         self.timeout = TIME_OUT
-        self.previous_action = 0
+        self.opp_timeout = TIME_OUT
         self.cp_done = 0
         self.speed_up = True
+        self.previous_action = 0
+        self.opp_previous_action = 0
         self.cp_queue = deque(maxlen=18)
         for _ in range(3):
             self.cp_queue.extend(self.map.check_points)
         last_cp = self.cp_queue.popleft()
         self.cp_queue.append(last_cp)
+        self.opponent_cp_queue = deque(self.cp_queue)
         observation = self.get_obs()
         return observation, {}
 
     def get_obs(self):
+        obs = {
+            'player_1': np.zeros(self.observation_space.shape, dtype=np.float32),
+            'player_2': np.zeros(self.observation_space.shape, dtype=np.float32),
+        }
+        # player 1 observation
         cp_x, cp_y = 0, 0
         if len(self.cp_queue) > 0:
             cp_x, cp_y = self.cp_queue[0]
@@ -176,7 +123,7 @@ class MapPodRacing(gym.Env):
         norm_pos_x, norm_pos_y = normalize_coord(self.my_pod.position.x, self.my_pod.position.y)
         cp_x, cp_y = normalize_coord(cp_x, cp_y)
         speed_vector = from_vector(self.my_pod.position, self.my_pod.position.add(self.my_pod.speed))
-        return np.array([
+        obs['player_1'] = np.array([
             to_positive_radians(angle),
             norm_pos_x, norm_pos_y,
             cp_x, cp_y,
@@ -186,23 +133,45 @@ class MapPodRacing(gym.Env):
             max(0.0, min(distance / MAX_DISTANCE, 1.0))
         ], dtype=np.float32)
 
+        # player 2 observation
+        opp_cp_x, opp_cp_y = 0, 0
+        if len(self.opponent_cp_queue) > 0:
+            opp_cp_x, opp_cp_y = self.opponent_cp_queue[0]
+            opp_distance = math.sqrt(
+                (self.opponent_pod.position.x - opp_cp_x) ** 2 + (self.opponent_pod.position.y - opp_cp_y) ** 2)
+        else:
+            opp_distance = 0
+        opp_angle = from_vector(self.opponent_pod.position, Vector(opp_cp_x, opp_cp_y)).angle()
+        opp_norm_pos_x, opp_norm_pos_y = normalize_coord(self.opponent_pod.position.x, self.opponent_pod.position.y)
+        opp_cp_x, opp_cp_y = normalize_coord(opp_cp_x, opp_cp_y)
+        opp_speed_vector = from_vector(self.opponent_pod.position, self.opponent_pod.position.add(self.my_pod.speed))
+        obs['player_2'] = np.array([
+            to_positive_radians(opp_angle),
+            opp_norm_pos_x, opp_norm_pos_y,
+            opp_cp_x, opp_cp_y,
+            self.opp_previous_action,
+            to_positive_radians(opp_speed_vector.angle()),
+            max(0.0, min(opp_speed_vector.length() / 800, 1.0)),
+            max(0.0, min(opp_distance / MAX_DISTANCE, 1.0))
+        ], dtype=np.float32)
+
+        return obs
+
     def step(self, action):
-        # assert self.action_space.contains(action), f"Invalid action: {action}"
-        # apply action on my pod
-        self.previous_action = action[0]
+        # player 1
+        self.previous_action = action['player_1'][0]
         '''if action[2] > 0.5 and self.speed_up:
             self.speed_up = False
             power = 650
         else:'''
-        power = int(action[1] * 10)
-        self.my_pod.update_acceleration_from_angle(action[0], power)
+        power = int(action['player_1'][1] * 10)
+        self.my_pod.update_acceleration_from_angle(action['player_1'][0], power)
         self.my_pod.apply_force(self.my_pod.acceleration)
         self.my_pod.step()
         self.my_pod.apply_friction()
         self.my_pod.end_round()
         terminated = False
         truncated = False
-        reward = -0.1
 
         if point_to_segment_distance(self.cp_queue[0][0], self.cp_queue[0][1],
                                      self.my_pod.last_position.x, self.my_pod.last_position.y,
@@ -210,16 +179,44 @@ class MapPodRacing(gym.Env):
             self.cp_queue.popleft()
             self.timeout = TIME_OUT
             if len(self.cp_queue) == 0:
-                reward = CP_REWARD
+                reward = 1
                 terminated = True
             else:
-                reward = CP_REWARD
                 self.cp_done += 1
         else:
             self.timeout -= 1
             if self.timeout <= 0:
                 terminated = True
+                reward = -1
         self.trajectory_reward += reward
+        # player 2
+        self.previous_action = action['player_2'][0]
+        '''if action[2] > 0.5 and self.speed_up:
+            self.speed_up = False
+            power = 650
+        else:'''
+        power = int(action['player_2'][1] * 10)
+        self.opponent_pod.update_acceleration_from_angle(action['player_2'][0], power)
+        self.opponent_pod.apply_force(self.my_pod.acceleration)
+        self.opponent_pod.step()
+        self.opponent_pod.apply_friction()
+        self.opponent_pod.end_round()
+        terminated = False
+        truncated = False
+
+        if point_to_segment_distance(self.opponent_cp_queue[0][0], self.opponent_cp_queue[0][1],
+                                     self.opponent_pod.last_position.x, self.opponent_pod.last_position.y,
+                                     self.opponent_pod.position.x, self.opponent_pod.position.y) <= CHECKPOINT_RADIUS:
+            self.opponent_cp_queue.popleft()
+            self.opp_timeout = TIME_OUT
+            if len(self.opponent_cp_queue) == 0:
+                reward = -1
+                terminated = True
+        else:
+            self.opp_timeout -= 1
+            if self.opp_timeout <= 0:
+                terminated = True
+                reward = 1
         obs = self.get_obs()
         info = {"cp_completion": 1 - (len(self.cp_queue) / (len(self.map.check_points) * 3))}
         return obs, reward, terminated, truncated, info
